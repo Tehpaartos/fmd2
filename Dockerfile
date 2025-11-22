@@ -6,11 +6,11 @@ ENV PROTON_DIR=/opt/proton
 ENV WINEPREFIX=/winedata
 ENV DISPLAY=:0
 
-# Enable i386 architecture & install dependencies
+# Enable i386 and install dependencies
 RUN dpkg --add-architecture i386 && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-        ca-certificates \
+        git \
         curl \
         xvfb \
         x11vnc \
@@ -21,8 +21,6 @@ RUN dpkg --add-architecture i386 && \
         winbind \
         cabextract \
         unzip \
-        git \
-        bash \
         xauth \
         libx11-6 \
         libxext6 \
@@ -30,8 +28,15 @@ RUN dpkg --add-architecture i386 && \
         libxrandr2 \
         libxi6 \
         libfreetype6 \
-        libfontconfig1 && \
+        libfontconfig1 \
+        mingw-w64 \
+        ca-certificates \
+        bash && \
     rm -rf /var/lib/apt/lists/*
+
+# Install .NET Framework MSBuild inside Wine via winetricks
+RUN apt-get update && apt-get install -y winetricks && \
+    winetricks -q dotnet472
 
 # Install Proton
 RUN mkdir -p $PROTON_DIR $WINEPREFIX && \
@@ -40,14 +45,19 @@ RUN mkdir -p $PROTON_DIR $WINEPREFIX && \
     tar -xf /tmp/proton.tar.gz -C $PROTON_DIR --strip-components=1 && \
     rm /tmp/proton.tar.gz
 
-# Add FMD2 files (replace with your path)
-COPY FMD2/ /app/FMD2/
-# Or:
-# RUN git clone https://github.com/dazedcat19/FMD2 /app/FMD2
+# Clone FMD2 from GitHub
+RUN git clone https://github.com/dazedcat19/FMD2 /src/FMD2
+
+# Build FMD2 using Wine MSBuild
+RUN wine "C:\\windows\\Microsoft.NET\\Framework\\v4.0.30319\\MSBuild.exe" \
+    Z:\\src\\FMD2\\FMD2.csproj /p:Configuration=Release
+
+# Copy built EXE to /app
+RUN mkdir -p /app/FMD2 && \
+    cp -r /src/FMD2/bin/Release/* /app/FMD2/
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 WORKDIR /app/FMD2
-
 ENTRYPOINT ["/entrypoint.sh"]
